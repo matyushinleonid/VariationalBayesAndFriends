@@ -1,6 +1,6 @@
 import torch
-from torch.distributions import register_kl
-from distributions import LogScaleUniform, VariationalDropoutDistribution
+from torch.distributions import register_kl, Normal, Bernoulli
+from distributions import LogScaleUniform, VariationalDropoutDistribution, BernoulliDropoutDistribution
 
 
 @register_kl(VariationalDropoutDistribution, LogScaleUniform)
@@ -17,3 +17,14 @@ def kl_normal_logscaleuniform(p, q):
     negative_kl = k1 * torch.sigmoid(k2 + k3 * log_alpha) - 0.5 * torch.log1p(torch.exp(-log_alpha)) + c
 
     return -torch.sum(negative_kl)
+
+
+@register_kl(BernoulliDropoutDistribution, Normal)
+def kl_bernoullidropout_logscaleuniform(p, q):
+    weight = p.affine_transform.scale
+    probs = p.relaxed_bernoulli.probs
+
+    # TODO
+    kl = 0 * torch.norm(weight, p=2).pow(2) / (1 - probs) - Bernoulli(probs - 0.5).entropy()
+
+    return kl.sum()
