@@ -1,6 +1,6 @@
 import torch
 from torch.distributions import Distribution, TransformedDistribution, Normal
-from torch.distributions.transforms import AffineTransform
+from torch.distributions.transforms import AffineTransform, ComposeTransform
 from torch.distributions.relaxed_bernoulli import RelaxedBernoulli
 
 class LogScaleUniform(Distribution):
@@ -18,7 +18,8 @@ class BernoulliDropoutDistribution(TransformedDistribution):
     def __init__(self, w, p, temperature=0.1, validate_args=None):
         relaxed_bernoulli = RelaxedBernoulli(temperature, p)
         affine_transform = AffineTransform(0, w)
-        super(BernoulliDropoutDistribution, self).__init__(relaxed_bernoulli, affine_transform, validate_args)
+        one_minus_p = AffineTransform(1, -1)
+        super(BernoulliDropoutDistribution, self).__init__(relaxed_bernoulli, ComposeTransform([one_minus_p, affine_transform]), validate_args)
 
         self.relaxed_bernoulli = relaxed_bernoulli
         self.affine_transform = affine_transform

@@ -25,6 +25,6 @@ def kl_bernoullidropout_logscaleuniform(p, q):
     probs = p.relaxed_bernoulli.probs
 
     # TODO
-    kl = 0 * torch.norm(weight, p=2).pow(2) / (1 - probs) - Bernoulli(probs - 0.5).entropy()
+    kl =  - Bernoulli(probs - 0.5).entropy() # + 0 * torch.norm(weight, p=2).pow(2) / (1 - probs + 0.5)
 
     return kl.sum()

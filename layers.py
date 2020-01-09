@@ -218,8 +218,8 @@ class FCBernoulliDropout(_FCLayer, _Bayes):
 
     @property
     def p(self):
-        p = torch.sigmoid(self.p_unsigmoided)
-        p = torch.sigmoid(50 * (torch.log(p) - torch.log(1-p)))
+        p = torch.sigmoid(self.p_unsigmoided - 0.5)
+        p = torch.sigmoid(50 * (torch.log(p) - torch.log(1 - p)))
         return p
 
     @property
@@ -239,7 +239,7 @@ class FCBernoulliDropout(_FCLayer, _Bayes):
         return output
 
     def _forward_deterministic(self, input):
-        return F.linear(input, self.weight)
+        return F.linear(input, self.weight * dist.Bernoulli(1 - self.p).sample())
 
     def forward(self, input):
         if self.training:
