@@ -23,3 +23,13 @@ class BernoulliDropoutDistribution(TransformedDistribution):
 
         self.relaxed_bernoulli = relaxed_bernoulli
         self.affine_transform = affine_transform
+
+
+class ToeplitzBernoulliDistribution(TransformedDistribution):
+    def __init__(self, w, p, l, temperature=0.1, validate_args=None):
+        relaxed_bernoulli = RelaxedBernoulli(temperature, p)
+        affine_transform = AffineTransform(w, l - w)
+        super(ToeplitzBernoulliDistribution, self).__init__(relaxed_bernoulli, affine_transform, validate_args)
+
+        self.relaxed_bernoulli = relaxed_bernoulli
+        self.affine_transform = affine_transform

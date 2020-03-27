@@ -2,11 +2,12 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch import distributions as dist
-from distributions import LogScaleUniform, VariationalDropoutDistribution, BernoulliDropoutDistribution
+from distributions import LogScaleUniform, VariationalDropoutDistribution, BernoulliDropoutDistribution, ToeplitzBernoulliDistribution
 import register_kls
 from torch.nn import init
 from abc import ABC, abstractmethod
-
+import numpy as np
+import scipy.linalg
 
 class _Bayes(ABC):
     def __init__(self, prior):
@@ -240,6 +241,80 @@ class FCBernoulliDropout(_FCLayer, _Bayes):
 
     def _forward_deterministic(self, input):
         return F.linear(input, self.weight * dist.Bernoulli(1 - self.p).sample())
+
+    def forward(self, input):
+        if self.training:
+            return self._forward_probabilistic(input)
+        else:
+            return self._forward_deterministic(input)
+
+
+class FCToeplitzBernoulli(_FCLayer, _Bayes):
+    def __init__(self, in_features, out_features, weight_initialization='xavier_uniform', weight_initialization_gain=1.,
+                 p_initialization='zeros', p_initialization_gain=None, concrete_bernoulli_temperature=0.1):
+
+        assert in_features == out_features
+
+        super(FCToeplitzBernoulli, self).__init__(in_features, out_features)
+
+        weight = nn.Parameter(torch.zeros(self.out_features, self.in_features))
+        if weight_initialization == 'xavier_uniform':
+            self.weight = init.xavier_uniform_(weight, gain=weight_initialization_gain)
+
+        p_unsigmoided = nn.Parameter(torch.zeros(self.out_features, self.in_features))
+        if p_initialization == 'zeros':
+            self.p_unsigmoided = init.zeros_(p_unsigmoided)
+            self.p_unsigmoided.data += 0.1
+
+        self.concrete_bernoulli_temperature = concrete_bernoulli_temperature
+
+
+    def get_variational_distribution(self):
+        w, p, l, temperature = self.weight, self.p, self.l, self.concrete_bernoulli_temperature
+
+        return ToeplitzBernoulliDistribution(w, p, l, temperature)
+
+    def get_prior(self):
+
+        # TODO
+        prior_mean, prior_std = 0, 1
+
+        return dist.Normal(prior_mean, prior_std)
+
+    @property
+    def p(self):
+        p = torch.sigmoid(self.p_unsigmoided - 0.5)
+        p = torch.sigmoid(50 * (torch.log(p) - torch.log(1 - p)))
+        return p
+
+    @property
+    def l(self):
+        w = self.weight.data.cpu()
+        digitized = np.flip(np.sum(np.indices(w.shape), axis=0), 1).ravel()
+        means = np.bincount(digitized, w.view(-1)) / np.bincount(digitized)
+        means_len = len(means[::-1]) // 2
+        l = scipy.linalg.toeplitz(means[means_len:], means[:means_len + 1][::-1])
+
+        return torch.Tensor(l).cuda()
+
+    @property
+    def clipped_weight(self):
+        non_zeros_mask = 1 - self._get_clip_mask()
+        return non_zeros_mask * self.weight
+
+    def _get_clip_mask(self):
+        return torch.ge(self.p, 0.9995).type(torch.float)
+
+    def _forward_probabilistic(self, input):
+
+        weight_distribution = self.get_variational_distribution()
+        weight = weight_distribution.rsample()
+        output = F.linear(input, weight)
+
+        return output
+
+    def _forward_deterministic(self, input):
+        return F.linear(input, self.weight +  (self.l - self.weight) * dist.Bernoulli(self.p).sample())
 
     def forward(self, input):
         if self.training:
