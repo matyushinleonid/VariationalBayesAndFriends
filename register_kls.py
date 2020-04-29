@@ -1,6 +1,6 @@
 import torch
 from torch.distributions import register_kl, Normal, Bernoulli
-from distributions import LogScaleUniform, VariationalDropoutDistribution, BernoulliDropoutDistribution, ToeplitzBernoulliDistribution
+from distributions import LogScaleUniform, VariationalDropoutDistribution, BernoulliDropoutDistribution, ToeplitzBernoulliDistribution, ToeplitzGaussianDistribution
 
 
 @register_kl(VariationalDropoutDistribution, LogScaleUniform)
@@ -17,6 +17,20 @@ def kl_normal_logscaleuniform(p, q):
     negative_kl = k1 * torch.sigmoid(k2 + k3 * log_alpha) - 0.5 * torch.log1p(torch.exp(-log_alpha)) + c
 
     return -torch.sum(negative_kl)
+
+
+from gauss_toep_kl_model import Net
+torch.cuda.set_device(3)
+tgd = Net().cuda()
+tgd.load_state_dict(torch.load('gauss_toep_kl_model_sate'))
+tgd.eval()
+@register_kl(ToeplitzGaussianDistribution, LogScaleUniform)
+def kl_normal_logscaleuniform(p, q):
+    logalpha, theta, l = p.logalpha, p.theta, p.l
+    size = logalpha.shape[0]
+    x = torch.cat([logalpha.view(-1,1), theta.view(-1,1), l.view(-1,1)], -1)
+    return - tgd(x).view(size,size) - 0.03 * logalpha
+    #return -torch.clamp(logalpha, -10, 10) * 10
 
 
 @register_kl(BernoulliDropoutDistribution, Normal)

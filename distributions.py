@@ -14,6 +14,16 @@ class VariationalDropoutDistribution(Normal):
         super(VariationalDropoutDistribution, self).__init__(loc, scale, validate_args)
 
 
+class ToeplitzGaussianDistribution(Normal):
+    def __init__(self, theta, alpha, l,validate_args=None):
+        loc, scale = theta, torch.sqrt((theta-l).pow(2) * alpha)
+        super(ToeplitzGaussianDistribution, self).__init__(loc, scale, validate_args)
+
+        self.logalpha = torch.log(alpha)
+        self.theta = theta
+        self.l = l
+
+
 class BernoulliDropoutDistribution(TransformedDistribution):
     def __init__(self, w, p, temperature=0.1, validate_args=None):
         relaxed_bernoulli = RelaxedBernoulli(temperature, p)
