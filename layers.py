@@ -61,16 +61,25 @@ class FCToeplitz(FCDeterministic):
         super(FCToeplitz, self).__init__(in_features, out_features, initialization='xavier_uniform',
                                          initialization_gain=1.)
         #self.params = nn.Parameter(torch.randn(self.out_features * 2 + 1))
-        a = np.sqrt(3.0) * 1. * np.sqrt(2.0 / 2 * self.size)
-        self.params = nn.Parameter(torch.rand(self.size * 2 + 1) * 2 * a - a)
+        a = np.sqrt(3.0) * 1. * np.sqrt(2.0 / (2 * self.size))
+        self.params = nn.Parameter(torch.rand(self.size * 2 - 1) * 2 * a - a)
+
+        self.register_buffer('A',
+                             torch.Tensor(np.fromfunction(
+                                 lambda i, j, k: ((5 - i) + j - 1 == k),
+                                 [self.size, self.size, self.size * 2 - 1],
+                                 dtype=int).astype(int))
+                             )
 
     @property
     def weight(self):
-        weight = []
-        for i, d in enumerate(range(-self.size + 1, self.size)):
-            weight.append(torch.diag(self.params[i].repeat(self.size - np.abs(d)), d))
+        # weight = []
+        # for i, d in enumerate(range(-self.size + 1, self.size)):
+        #     weight.append(torch.diag(self.params[i].repeat(self.size - np.abs(d)), d))
+        #
+        # return torch.stack(weight).sum(0)
 
-        return torch.stack(weight).sum(0)
+        return torch.matmul(self.A, self.params)
 
 class FCGaussian(_FCLayer, _Bayes):
     def __init__(self, in_features, out_features, mean_initialization='xavier_uniform', mean_initialization_gain=1.,
@@ -291,6 +300,7 @@ class FCToeplitzBernoulli(_FCLayer, _Bayes):
             self.p_unsigmoided.data += 0.1
 
         self.concrete_bernoulli_temperature = concrete_bernoulli_temperature
+        self.fully_toeplitz = False
 
 
     def get_variational_distribution(self):
@@ -338,7 +348,13 @@ class FCToeplitzBernoulli(_FCLayer, _Bayes):
         return output
 
     def _forward_deterministic(self, input):
-        return F.linear(input, self.weight +  (self.l - self.weight) * 1) # dist.Bernoulli(self.p).sample())
+
+        if self.fully_toeplitz:
+            mean = self.l
+        else:
+            mean = self.weight
+
+        return F.linear(input, mean) # dist.Bernoulli(self.p).sample())
 
     def forward(self, input):
         if self.training:
@@ -358,6 +374,8 @@ class FCToeplitzGaussain(FCVariationalDropout):
                                                  logalpha_initialization_gain=logalpha_initialization_gain,
                                                  do_local_reparameterization=do_local_reparameterization,
                                                  logalpha_threshold=logalpha_threshold)
+
+        self.fully_toeplitz = False
 
     @property
     def l(self):
@@ -388,5 +406,8 @@ class FCToeplitzGaussain(FCVariationalDropout):
         #     mean = self.clipped_mean
         # else:
         #     mean = self.mean
-        mean = self.l
+        if self.fully_toeplitz:
+            mean = self.l
+        else:
+            mean = self.mean
         return F.linear(input, mean)

@@ -22,7 +22,7 @@ def kl_normal_logscaleuniform(p, q):
 from gauss_toep_kl_model import Net
 torch.cuda.set_device(3)
 tgd = Net().cuda()
-tgd.load_state_dict(torch.load('gauss_toep_kl_model_sate'))
+tgd.load_state_dict(torch.load('gauss_toep_kl_model_state'))
 tgd.eval()
 @register_kl(ToeplitzGaussianDistribution, LogScaleUniform)
 def kl_normal_logscaleuniform(p, q):
