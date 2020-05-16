@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import pandas as pd
+import numpy as np
 from torchvision import datasets, transforms
 import uuid
 import pickle
@@ -15,22 +17,22 @@ os.environ['CUDA_VISIBLE_DEVICES']='3'
 
 torch.cuda.set_device(3)
 use_cuda = torch.cuda.is_available()
-kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
-train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../../data', train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.Resize((14, 14)),
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ])),
-    batch_size=32, shuffle=True, **kwargs)
-test_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../../data', train=False, transform=transforms.Compose([
-        transforms.Resize((14, 14)),
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-    ])),
-    batch_size=32, shuffle=True, **kwargs)
+
+df = pd.read_csv('~/data/HIGGS.csv',  header=None)
+X_train = torch.Tensor(df.loc[:len(df)-500000, np.arange(1, 29)].values)
+mean = X_train.mean(0)
+std = X_train.std(0)
+X_train = (X_train - mean) / std
+y_train = torch.Tensor(df.loc[:len(df)-500000, 0].values).type(torch.long)
+train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
+
+X_test = torch.Tensor(df.loc[len(df)-500000:, np.arange(1, 29)].values)
+X_test = (X_test - mean) / std
+y_test = torch.Tensor(df.loc[len(df)-500000:, 0].values).type(torch.long)
+test_dataset = torch.utils.data.TensorDataset(X_test, y_test)
+
+train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=20000, shuffle=True)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=20000)
 
 
 def train(args, model, device, train_loader, optimizer, epoch, alpha=1.):
@@ -77,9 +79,9 @@ class Net(nn.Module):
         super(Net, self).__init__()
 
         self.fc = nn.Sequential(OrderedDict([
-            ('f6', Layer(14 * 14, 14 * 14)),
+            ('f6', Layer(28, 28)),
             ('relu6', nn.ReLU()),
-            ('f7', layers.FCDeterministic(14 * 14, 10)),
+            ('f7', layers.FCDeterministic(28, 10)),
             ('sig7', nn.LogSoftmax(dim=-1))
         ]))
 
@@ -152,6 +154,6 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError
 
-    EXPERIMENT_NAME = f'mnist_{LAYER}_{EPOCH_NUMBER}_{ALPHA}_{uuid.uuid4().hex}'
+    EXPERIMENT_NAME = f'higgs_{LAYER}_{EPOCH_NUMBER}_{ALPHA}_{uuid.uuid4().hex}'
 
     main()
